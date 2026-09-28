@@ -27,7 +27,7 @@
 <div align="center">
 
 <img src="https://img.shields.io/badge/Manifest-V3-00e5ff?style=for-the-badge&logo=googlechrome&logoColor=white"/>
-<img src="https://img.shields.io/badge/Firefox-compatible-FF7139?style=for-the-badge&logo=firefox&logoColor=white"/>
+<img src="https://img.shields.io/badge/Firefox-128+-FF7139?style=for-the-badge&logo=firefox&logoColor=white"/>
 <img src="https://img.shields.io/badge/version-1.2-00c851?style=for-the-badge"/>
 <img src="https://img.shields.io/badge/license-GPL--3.0-blueviolet?style=for-the-badge"/>
 
@@ -69,7 +69,9 @@ Browser extension that keeps your [moodle.econom.zp.ua](https://moodle.econom.zp
 
 | File | Role |
 |---|---|
-| `manifest.json` | Extension config (MV3), permissions, icons |
+| `manifest.json` | Chrome / Edge / Brave config (MV3) |
+| `firefox/manifest.json` | Firefox config (MV2) |
+| `build-firefox.js` | Assembles `dist-firefox/` for Firefox |
 | `background.js` | Service worker — keepalive ticker, auto-login, debounce |
 | `content.js` | Logout detection + header widget + toast |
 | `popup.html` | Popup UI |
@@ -103,10 +105,21 @@ Browser extension that keeps your [moodle.econom.zp.ua](https://moodle.econom.zp
 ```
 
 **Firefox**
+
+Firefox uses MV2, so the root `manifest.json` won't work directly.
+Run the build script first — it assembles everything into `dist-firefox/`:
+
+```bash
+node build-firefox.js
+```
+
 ```
 1. Open about:debugging#/runtime/this-firefox
-2. "Load Temporary Add-on" → select manifest.json
+2. "Load Temporary Add-on" → select dist-firefox/manifest.json
 ```
+
+> The Firefox manifest lives in `firefox/manifest.json` (MV2).
+> `build-firefox.js` copies all extension files + that manifest into `dist-firefox/`.
 
 ---
 
