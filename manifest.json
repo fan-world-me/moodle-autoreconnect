@@ -5,7 +5,10 @@
   "description": "Держить сесію на moodle.econom.zp.ua живою і автоматично логіниться, якщо сесія протухла",
   "permissions": ["storage", "alarms", "tabs"],
   "host_permissions": ["https://moodle.econom.zp.ua/*"],
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

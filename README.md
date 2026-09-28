@@ -138,7 +138,7 @@ Browser extension that keeps your [moodle.econom.zp.ua](https://moodle.econom.zp
 
 <div align="center">
 
-Made with 🩵 in Zaporizhzhia, Ukraine 🇺🇦
+Made with 🩵 in Ukraine 🇺🇦
 
 [![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)
 [![Discord](https://img.shields.io/badge/Discord-fan__world__me-5865F2?style=flat-square&logo=discord)](https://discord.com/users/fan_world_me)
