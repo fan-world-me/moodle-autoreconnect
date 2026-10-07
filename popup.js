@@ -22,6 +22,15 @@ $("enabled").onchange = async () => {
   await chrome.storage.local.set({ enabled: $("enabled").checked });
 };
 
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.lastStatus || changes.lastStatusTime) {
+    chrome.storage.local.get(["lastStatus", "lastStatusTime"], d => {
+      renderStatus(d.lastStatus, d.lastStatusTime);
+    });
+  }
+});
+
 function renderStatus(status, time) {
   const labels = {
     ok: "Сесія жива",

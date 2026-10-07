@@ -6,12 +6,17 @@
 
   const REPO_URL = "https://github.com/fan-world-me/moodle-autoreconnect";
 
-  injectHeaderWidget(); // updateDot() вже викликається всередині injectHeaderWidget()
+  injectHeaderWidget();
+  hideFooter();
   await handleLoginPageIfNeeded();
   checkSessionAndReact();
 
   chrome.runtime.onMessage.addListener(msg => {
     if (msg?.type === "SESSION_RELOGGED") showToast();
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.lastStatus) updateDot();
   });
 
   // ---------- страница логина: страховка ----------
@@ -104,6 +109,20 @@
     const s = await chrome.storage.local.get(["lastStatus"]);
     const map = { ok: "#00e5ff", relogged: "#00e5ff", error: "#ff4444", off: "#6f8791", idle: "#6f8791" };
     dot.style.background = map[s.lastStatus] || map.idle;
+  }
+
+  function hideFooter() {
+    const footer = document.getElementById("page-footer");
+    if (footer) {
+      footer.style.display = "none";
+    } else {
+      // Якщо футер ще не в DOM — чекаємо
+      const observer = new MutationObserver(() => {
+        const f = document.getElementById("page-footer");
+        if (f) { f.style.display = "none"; observer.disconnect(); }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
   }
 
   function showToast() {
