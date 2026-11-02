@@ -139,12 +139,18 @@ async function handleLoginRedirect(tabId, url) {
 
   if (!wantsUrl) return;
 
+  // Показуємо overlay в цій вкладці
+  chrome.tabs.sendMessage(tabId, { type: "LOGIN_REDIRECT_START" }).catch(() => {});
+
   // Логінимось в фоні
   const ok = await login();
   if (ok) {
     // Після успішного логіну — відправляємо на потрібну сторінку
     const target = wantsUrl.startsWith("http") ? wantsUrl : BASE + wantsUrl;
     chrome.tabs.update(tabId, { url: target });
+  } else {
+    // Якщо не вдалось — прибираємо overlay
+    chrome.tabs.sendMessage(tabId, { type: "LOGIN_REDIRECT_DONE" }).catch(() => {});
   }
 }
 
