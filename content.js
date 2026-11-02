@@ -1,4 +1,12 @@
 (async () => {
+  // Захист: якщо service worker інвалідований — chrome.runtime може бути undefined.
+  // Всі sendMessage обгорнуті в safeSend(), щоб не крашитись.
+  function safeSend(msg) {
+    try {
+      if (chrome?.runtime?.id) chrome.runtime.sendMessage(msg).catch(() => {});
+    } catch (_) {}
+  }
+
   const { enabled } = await chrome.storage.local.get(["enabled"]);
   if (enabled === false) return;
 
@@ -14,28 +22,32 @@
   await handleLoginPageIfNeeded();
   checkSessionAndReact();
 
-  chrome.runtime.onMessage.addListener(msg => {
-    if (msg?.type === "SESSION_RELOGGED") {
-      if (msg.autoReload) {
-        location.reload();          // миттєво, без затримки
-      } else {
-        showManualReloadToast();    // плашка «оновити вручну»
+  if (chrome?.runtime?.id) {
+    chrome.runtime.onMessage.addListener(msg => {
+      if (msg?.type === "SESSION_RELOGGED") {
+        if (msg.autoReload) {
+          location.reload();
+        } else {
+          showManualReloadToast();
+        }
       }
-    }
-    if (msg?.type === "LOGIN_REDIRECT_START") showRedirectOverlay();
-    if (msg?.type === "LOGIN_REDIRECT_DONE")  hideRedirectOverlay();
-  });
+      if (msg?.type === "LOGIN_REDIRECT_START") showRedirectOverlay();
+      if (msg?.type === "LOGIN_REDIRECT_DONE")  hideRedirectOverlay();
+    });
+  }
 
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.lastStatus) updateDot();
-  });
+  if (chrome?.runtime?.id) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.lastStatus) updateDot();
+    });
+  }
 
   // ── детект ручного виходу ─────────────────────────────────────
   function detectManualLogout() {
     document.addEventListener("click", e => {
       const a = e.target.closest("a");
       if (a?.href?.includes("/login/logout.php")) {
-        chrome.runtime.sendMessage({ type: "MANUAL_LOGOUT" });
+        safeSend({ type: "MANUAL_LOGOUT" });
       }
     }, { capture: true });
   }
@@ -74,7 +86,7 @@
   function checkSessionAndReact() {
     if (location.pathname.startsWith("/login/")) return;
     if (!document.querySelector(".usermenu, [data-region='user-menu']")) {
-      chrome.runtime.sendMessage({ type: "NO_SESSION_DETECTED" });
+      safeSend({ type: "NO_SESSION_DETECTED" });
     }
   }
 
