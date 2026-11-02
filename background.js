@@ -9,17 +9,20 @@ const INTERVAL_MIN = 10;
 // решта    — в storage.local (статус, tries, флаги)
 
 async function getCredentials() {
-  const s = await chrome.storage.sync.get(["user", "pass"]);
-  // міграція: якщо в sync пусто, але в local є — переносимо одноразово
-  if (!s.user) {
-    const l = await chrome.storage.local.get(["user", "pass"]);
-    if (l.user) {
-      await chrome.storage.sync.set({ user: l.user, pass: l.pass || "" });
-      await chrome.storage.local.remove(["user", "pass"]);
-      return { user: l.user, pass: l.pass || "" };
-    }
+  // Основне сховище — storage.local
+  // Відновлення з localStorage moodle відбувається в content.js при кожному завантаженні сторінки
+  const d = await chrome.storage.local.get(["user", "pass"]);
+  // Fallback: спробувати sync (якщо є акаунт Chrome)
+  if (!d.user) {
+    try {
+      const s = await chrome.storage.sync.get(["user", "pass"]);
+      if (s.user) {
+        await chrome.storage.local.set({ user: s.user, pass: s.pass });
+        return { user: s.user, pass: s.pass || "" };
+      }
+    } catch (_) {}
   }
-  return { user: s.user || "", pass: s.pass || "" };
+  return { user: d.user || "", pass: d.pass || "" };
 }
 
 async function getSettings() {

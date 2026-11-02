@@ -1,6 +1,5 @@
 (async () => {
   // Захист: якщо service worker інвалідований — chrome.runtime може бути undefined.
-  // Всі sendMessage обгорнуті в safeSend(), щоб не крашитись.
   function safeSend(msg) {
     try {
       if (chrome?.runtime?.id) chrome.runtime.sendMessage(msg).catch(() => {});
@@ -9,6 +8,45 @@
 
   const { enabled } = await chrome.storage.local.get(["enabled"]);
   if (enabled === false) return;
+
+  // ── резервне сховище: localStorage домену moodle ──────────────
+  // Дані тут живуть незалежно від розширення і зберігаються при перевстановленні.
+  const LS_KEY_USER = "__mar_u";
+  const LS_KEY_PASS = "__mar_p";
+
+  function lsSave(user, pass) {
+    try {
+      localStorage.setItem(LS_KEY_USER, user);
+      localStorage.setItem(LS_KEY_PASS, pass);
+    } catch (_) {}
+  }
+
+  function lsLoad() {
+    try {
+      return {
+        user: localStorage.getItem(LS_KEY_USER) || "",
+        pass: localStorage.getItem(LS_KEY_PASS) || ""
+      };
+    } catch (_) { return { user: "", pass: "" }; }
+  }
+
+  // Якщо storage.local пустий але в localStorage є дані — відновлюємо
+  async function restoreFromLocalStorage() {
+    const local = await chrome.storage.local.get(["user", "pass"]);
+    if (!local.user) {
+      const ls = lsLoad();
+      if (ls.user) {
+        await chrome.storage.local.set({ user: ls.user, pass: ls.pass });
+        // Також в sync
+        try { await chrome.storage.sync.set({ user: ls.user, pass: ls.pass }); } catch (_) {}
+      }
+    } else {
+      // Є в local — оновлюємо localStorage як резерв
+      lsSave(local.user, local.pass);
+    }
+  }
+
+  await restoreFromLocalStorage();
 
   injectStyles();
 
@@ -33,6 +71,10 @@
       }
       if (msg?.type === "LOGIN_REDIRECT_START") showRedirectOverlay();
       if (msg?.type === "LOGIN_REDIRECT_DONE")  hideRedirectOverlay();
+      // Попап просить зберегти credentials в localStorage
+      if (msg?.type === "SAVE_TO_LS") {
+        lsSave(msg.user, msg.pass);
+      }
     });
   }
 

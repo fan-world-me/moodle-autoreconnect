@@ -14,11 +14,12 @@ const STATUS_MAP = {
 
 (async () => {
   const [sync, local] = await Promise.all([
-    chrome.storage.sync.get(["user", "pass"]),
-    chrome.storage.local.get(["enabled", "autoReload", "lastStatus", "lastStatusTime", "manualLogout"])
+    chrome.storage.sync.get(["user", "pass"]).catch(() => ({})),
+    chrome.storage.local.get(["user", "pass", "enabled", "autoReload", "lastStatus", "lastStatusTime", "manualLogout"])
   ]);
-  $("user").value         = sync.user  || "";
-  $("pass").value         = sync.pass  || "";
+  // local має пріоритет (туди вже відновлено з localStorage moodle), sync як fallback
+  $("user").value         = local.user  || sync.user  || "";
+  $("pass").value         = local.pass  || sync.pass  || "";
   $("enabled").checked    = local.enabled    !== false;
   $("autoReload").checked = local.autoReload !== false;
   renderStatus(local.lastStatus, local.lastStatusTime);
@@ -26,16 +27,19 @@ const STATUS_MAP = {
 })();
 
 $("save").onclick = async () => {
+  const user = $("user").value.trim();
+  const pass = $("pass").value;
   await Promise.all([
-    chrome.storage.sync.set({
-      user: $("user").value.trim(),
-      pass: $("pass").value,
-    }),
-    chrome.storage.local.set({
-      enabled:    $("enabled").checked,
-      autoReload: $("autoReload").checked,
-    })
+    chrome.storage.local.set({ user, pass, enabled: $("enabled").checked, autoReload: $("autoReload").checked }),
+    // sync як додатковий резерв (працює якщо є акаунт Chrome)
+    chrome.storage.sync.set({ user, pass }).catch(() => {})
   ]);
+  // Просимо content script записати в localStorage moodle
+  chrome.tabs.query({ url: "https://moodle.econom.zp.ua/*" }, tabs => {
+    for (const tab of tabs) {
+      chrome.tabs.sendMessage(tab.id, { type: "SAVE_TO_LS", user, pass }).catch(() => {});
+    }
+  });
   chrome.runtime.sendMessage({ type: "RESET_MANUAL_LOGOUT" }, () => {});
   $("logoutWarn").style.display = "none";
   $("save").textContent = "Збережено ✓";
