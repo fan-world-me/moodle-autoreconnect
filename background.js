@@ -1,18 +1,20 @@
 const BASE = "https://moodle.econom.zp.ua";
 const HOST_PATTERN = "https://moodle.econom.zp.ua/*";
 const ALARM_NAME = "keepalive";
-const INTERVAL_MIN = 10; // держим с большим запасом от sessiontimeout=3600 (60 мин)
+const INTERVAL_MIN = 10;
 
 // ---------- утилиты ----------
 
 async function getSettings() {
-  const d = await chrome.storage.local.get(["user", "pass", "enabled", "tries", "lastStatus"]);
+  const d = await chrome.storage.local.get(["user", "pass", "enabled", "tries", "lastStatus", "autoReload", "manualLogout"]);
   return {
     user: d.user || "",
     pass: d.pass || "",
-    enabled: d.enabled !== false, // по умолчанию включено
+    enabled: d.enabled !== false,
     tries: d.tries || [],
-    lastStatus: d.lastStatus || "idle"
+    lastStatus: d.lastStatus || "idle",
+    autoReload: d.autoReload !== false, // по умолчанию включено
+    manualLogout: d.manualLogout === true // по умолчанию false
   };
 }
 
@@ -23,11 +25,12 @@ async function setStatus(status) {
 
 function updateBadge(status) {
   const map = {
-    ok: { text: "", color: "#00c851" },
-    relogged: { text: "↻", color: "#00c851" },
-    error: { text: "!", color: "#ff4444" },
-    idle: { text: "", color: "#888888" },
-    off: { text: "off", color: "#888888" }
+    ok:          { text: "",    color: "#00c851" },
+    relogged:    { text: "↻",   color: "#00c851" },
+    error:       { text: "!",   color: "#ff4444" },
+    idle:        { text: "",    color: "#888888" },
+    off:         { text: "off", color: "#888888" },
+    logout:      { text: "!",   color: "#ff4444" }
   };
   const cfg = map[status] || map.idle;
   chrome.action.setBadgeText({ text: cfg.text });
@@ -39,14 +42,17 @@ async function hasMoodleTabOpen() {
   return tabs.length > 0;
 }
 
-async function notifyTabs() {
+async function notifyTabs(autoReload) {
   const tabs = await chrome.tabs.query({ url: HOST_PATTERN });
   for (const tab of tabs) {
-    chrome.tabs.sendMessage(tab.id, { type: "SESSION_RELOGGED" }).catch(() => {});
+    // не перезавантажуємо вкладку якщо вона зараз на сторінці логіну
+    // (там content.js сам зробить submit і редірект)
+    if (tab.url && tab.url.includes("/login/")) continue;
+    chrome.tabs.sendMessage(tab.id, { type: "SESSION_RELOGGED", autoReload }).catch(() => {});
   }
 }
 
-// ---------- основная логика ----------
+// ---------- основна логіка ----------
 
 async function isLoggedIn() {
   const res = await fetch(`${BASE}/my/`, { credentials: "include", redirect: "follow" });
@@ -54,7 +60,7 @@ async function isLoggedIn() {
 }
 
 async function login() {
-  const { user, pass, tries } = await getSettings();
+  const { user, pass, tries, autoReload } = await getSettings();
   if (!user || !pass) {
     await setStatus("error");
     return false;
@@ -63,7 +69,7 @@ async function login() {
   const now = Date.now();
   const recent = tries.filter(t => now - t < 120000);
   if (recent.length >= 3) {
-    await setStatus("error"); // защита от блокировки аккаунта за перебор
+    await setStatus("error");
     return false;
   }
   recent.push(now);
@@ -81,10 +87,9 @@ async function login() {
       body: new URLSearchParams({ username: user, password: pass, logintoken: token })
     });
 
-    // проверяем, что сервер реально принял сессию
     const okNow = !res.url.includes("/login/index.php") || (await isLoggedIn());
     await setStatus(okNow ? "relogged" : "error");
-    if (okNow) notifyTabs();
+    if (okNow) notifyTabs(autoReload);
     return okNow;
   } catch (e) {
     console.error("moodle-relogin: login failed", e);
@@ -94,14 +99,16 @@ async function login() {
 }
 
 async function tick() {
-  const { enabled } = await getSettings();
+  const { enabled, manualLogout } = await getSettings();
   if (!enabled) { await setStatus("off"); return; }
 
-  // если ни одной вкладки moodle не открыто - сессия никому не нужна, ничего не делаем
+  // Якщо юзер вийшов вручну — не логінимось, показуємо стан logout
+  if (manualLogout) { await setStatus("logout"); return; }
+
   if (!(await hasMoodleTabOpen())) return;
 
   try {
-    const ok = await isLoggedIn(); // сам факт запроса уже продлевает сессию на сервере
+    const ok = await isLoggedIn();
     if (ok) {
       await setStatus("ok");
     } else {
@@ -113,7 +120,35 @@ async function tick() {
   }
 }
 
-// ---------- события ----------
+// ---------- перехват редіректу на логін ----------
+// Коли браузер збирається відкрити /login/index.php?wantsurl=... — перехоплюємо,
+// логінимось в фоні і кидаємо вкладку на оригінальний URL.
+chrome.webNavigation && chrome.webNavigation.onBeforeNavigate
+  ? null
+  : null; // webNavigation нема в MV3 без декларації — використовуємо tabs.onUpdated
+
+async function handleLoginRedirect(tabId, url) {
+  const { enabled, manualLogout } = await getSettings();
+  if (!enabled || manualLogout) return;
+
+  let wantsUrl = null;
+  try {
+    const u = new URL(url);
+    wantsUrl = u.searchParams.get("wantsurl");
+  } catch (_) { return; }
+
+  if (!wantsUrl) return;
+
+  // Логінимось в фоні
+  const ok = await login();
+  if (ok) {
+    // Після успішного логіну — відправляємо на потрібну сторінку
+    const target = wantsUrl.startsWith("http") ? wantsUrl : BASE + wantsUrl;
+    chrome.tabs.update(tabId, { url: target });
+  }
+}
+
+// ---------- події ----------
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: INTERVAL_MIN });
@@ -125,22 +160,26 @@ chrome.runtime.onStartup.addListener(() => {
 });
 chrome.alarms.onAlarm.addListener(a => { if (a.name === ALARM_NAME) tick(); });
 
-// Коли відкривається/оновлюється вкладка moodle — перевіряємо (не чекаємо 10 хвилин).
-// Debounce 3 с: при швидкій навігації між сторінками tick() викликається лише раз,
-// а не на кожен "complete" event підряд.
 let _tickDebounceTimer = null;
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-  if (info.status === "complete" && tab.url && tab.url.startsWith(BASE)) {
-    clearTimeout(_tickDebounceTimer);
-    _tickDebounceTimer = setTimeout(tick, 600);
+  if (info.status !== "complete" || !tab.url) return;
+  if (!tab.url.startsWith(BASE)) return;
+
+  // Перехват редіректу: вкладка потрапила на /login/index.php?wantsurl=...
+  if (tab.url.includes("/login/index.php") && tab.url.includes("wantsurl=")) {
+    handleLoginRedirect(tabId, tab.url);
+    return;
   }
+
+  clearTimeout(_tickDebounceTimer);
+  _tickDebounceTimer = setTimeout(tick, 600);
 });
 
-// сообщения от content.js (страница без сессии на главной) и popup.js (сохранить/статус)
+// Повідомлення від content.js і popup.js
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "NO_SESSION_DETECTED") {
     login().then(ok => sendResponse({ ok }));
-    return true; // асинхронный ответ
+    return true;
   }
   if (msg?.type === "FORCE_CHECK") {
     tick().then(() => sendResponse({ done: true }));
@@ -148,6 +187,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "GET_STATUS") {
     getSettings().then(s => sendResponse(s));
+    return true;
+  }
+  // Юзер вручну натиснув "Вийти" на сайті
+  if (msg?.type === "MANUAL_LOGOUT") {
+    chrome.storage.local.set({ manualLogout: true });
+    setStatus("logout");
+    sendResponse({ ok: true });
+    return true;
+  }
+  // Юзер знову зберіг пароль або вмикає розширення — скидаємо manual logout
+  if (msg?.type === "RESET_MANUAL_LOGOUT") {
+    chrome.storage.local.set({ manualLogout: false });
+    tick().then(() => sendResponse({ done: true }));
     return true;
   }
 });

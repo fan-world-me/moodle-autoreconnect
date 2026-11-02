@@ -8,30 +8,50 @@
 
   injectHeaderWidget();
   hideFooter();
+  detectManualLogout();
   await handleLoginPageIfNeeded();
   checkSessionAndReact();
 
   chrome.runtime.onMessage.addListener(msg => {
-    if (msg?.type === "SESSION_RELOGGED") showToast();
+    if (msg?.type === "SESSION_RELOGGED") {
+      if (msg.autoReload) {
+        showReloadToast();
+      } else {
+        showToast();
+      }
+    }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes.lastStatus) updateDot();
   });
 
-  // ---------- страница логина: страховка ----------
+  // ---------- детект ручного виходу ----------
+  // Якщо юзер натискає посилання "Вийти" (/login/logout.php) — фіксуємо це.
+  function detectManualLogout() {
+    document.addEventListener("click", e => {
+      const a = e.target.closest("a");
+      if (!a) return;
+      const href = a.href || "";
+      if (href.includes("/login/logout.php")) {
+        chrome.runtime.sendMessage({ type: "MANUAL_LOGOUT" });
+      }
+    }, { capture: true });
+  }
+
+  // ---------- сторінка логіну: страховка ----------
   async function handleLoginPageIfNeeded() {
     const onLoginPage = location.pathname.startsWith("/login/index.php");
     const loginForm = document.querySelector("form#login");
     if (!onLoginPage || !loginForm) return;
 
-    const { user, pass } = await chrome.storage.local.get(["user", "pass"]);
+    const { user, pass, manualLogout } = await chrome.storage.local.get(["user", "pass", "manualLogout"]);
     if (!user || !pass) return;
+    // Якщо юзер сам вийшов — не автологінимось
+    if (manualLogout) return;
     if (document.querySelector("#loginerrormessage, .loginerrors, .alert-danger")) return;
 
     const now = Date.now();
-    // Використовуємо той самий ключ "tries", що й background.js — спільний лімит 3 спроби за 2 хв.
-    // Це запобігає ситуації, коли content.js та background.js разом роблять 3+3=6 спроб.
     const d = await chrome.storage.local.get(["tries"]);
     let tries = (d.tries || []).filter(t => now - t < 120000);
     if (tries.length >= 3) return;
@@ -46,10 +66,7 @@
     loginForm.submit();
   }
 
-  // ---------- любая другая страница: детект разлогина ----------
   // ---------- будь-яка інша сторінка: детект розлогіна ----------
-  // На /login/ немає .usermenu за визначенням — handleLoginPageIfNeeded() вже обробляє цей кейс.
-  // Паралельне NO_SESSION_DETECTED звідси спричинило б подвійну спробу логіна з background.js.
   function checkSessionAndReact() {
     if (location.pathname.startsWith("/login/")) return;
     const loggedOut = !document.querySelector(".usermenu, [data-region='user-menu']");
@@ -58,7 +75,46 @@
     }
   }
 
-  // ---------- виджет в шапке ----------
+  // ---------- тост з авто-перезавантаженням ----------
+  function showReloadToast() {
+    if (document.getElementById("__mar_toast")) return;
+    let secs = 5;
+    const t = document.createElement("div");
+    t.id = "__mar_toast";
+    t.innerHTML = `Сесія Moodle оновлена — перезавантаження через <b id="__mar_cd">${secs}</b> с <span class="__mar_skip">Скасувати</span>`;
+    document.body.appendChild(t);
+
+    t.querySelector(".__mar_skip").onclick = () => {
+      clearInterval(iv);
+      t.remove();
+    };
+
+    const iv = setInterval(() => {
+      secs--;
+      const cd = document.getElementById("__mar_cd");
+      if (cd) cd.textContent = secs;
+      if (secs <= 0) {
+        clearInterval(iv);
+        location.reload();
+      }
+    }, 1000);
+
+    // на випадок якщо тост не закрили — прибрати через 10 сек
+    setTimeout(() => { clearInterval(iv); t.remove(); }, 10000);
+  }
+
+  // ---------- тост без авто-перезавантаження ----------
+  function showToast() {
+    if (document.getElementById("__mar_toast")) return;
+    const t = document.createElement("div");
+    t.id = "__mar_toast";
+    t.textContent = "Сесія Moodle оновлена — оновіть сторінку";
+    t.onclick = () => location.reload();
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 8000);
+  }
+
+  // ---------- виджет в шапці ----------
   function injectHeaderWidget() {
     if (document.getElementById("__mar_widget")) return;
 
@@ -107,7 +163,11 @@
     const dot = document.getElementById("__mar_dot");
     if (!dot) return;
     const s = await chrome.storage.local.get(["lastStatus"]);
-    const map = { ok: "#00e5ff", relogged: "#00e5ff", error: "#ff4444", off: "#6f8791", idle: "#6f8791" };
+    const map = {
+      ok: "#00e5ff", relogged: "#00e5ff",
+      error: "#ff4444", logout: "#ff4444",
+      off: "#6f8791", idle: "#6f8791"
+    };
     dot.style.background = map[s.lastStatus] || map.idle;
   }
 
@@ -116,23 +176,12 @@
     if (footer) {
       footer.style.display = "none";
     } else {
-      // Якщо футер ще не в DOM — чекаємо
       const observer = new MutationObserver(() => {
         const f = document.getElementById("page-footer");
         if (f) { f.style.display = "none"; observer.disconnect(); }
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
-  }
-
-  function showToast() {
-    if (document.getElementById("__mar_toast")) return;
-    const t = document.createElement("div");
-    t.id = "__mar_toast";
-    t.textContent = "Сесія Moodle оновлена — оновіть сторінку";
-    t.onclick = () => location.reload();
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 8000);
   }
 
   function injectStyles() {
@@ -161,10 +210,17 @@
         background: rgba(6,20,36,0.92); backdrop-filter: blur(14px);
         border: 1px solid rgba(0,229,255,0.4);
         color: #e6f7ff; font-size: 12px; padding: 10px 16px;
-        border-radius: 12px; cursor: pointer;
+        border-radius: 12px;
         box-shadow: 0 8px 24px rgba(0,0,0,0.4);
         font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        cursor: default;
       }
+      #__mar_toast b { color: #00e5ff; }
+      #__mar_toast .__mar_skip {
+        margin-left: 10px; color: #9fe8ff; text-decoration: underline;
+        cursor: pointer; font-size: 11px; opacity: 0.8;
+      }
+      #__mar_toast .__mar_skip:hover { opacity: 1; }
     `;
     document.head.appendChild(s);
   }

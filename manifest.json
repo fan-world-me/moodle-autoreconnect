@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Moodle Auto Relogin",
-  "version": "1.2",
+  "version": "1.3",
   "description": "Держить сесію на moodle.econom.zp.ua живою і автоматично логіниться, якщо сесія протухла",
   "permissions": ["storage", "alarms", "tabs"],
   "host_permissions": ["https://moodle.econom.zp.ua/*"],
