@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Moodle Auto Relogin",
-  "version": "1.2",
+  "version": "1.5",
   "description": "Держить сесію на moodle.econom.zp.ua живою і автоматично логіниться, якщо сесія протухла",
   "permissions": [
     "storage",
@@ -31,10 +31,13 @@
     {
       "matches": ["https://moodle.econom.zp.ua/*"],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_end"
     }
   ],
   "browser_specific_settings": {
-    "gecko": { "id": "moodle-relogin@yarik.local", "strict_min_version": "68.0" }
+    "gecko": {
+      "id": "moodle-relogin@fan-world-me",
+      "strict_min_version": "68.0"
+    }
   }
 }
