@@ -46,7 +46,12 @@
     const loginForm   = document.querySelector("form#login");
     if (!onLoginPage || !loginForm) return;
 
-    const { user, pass, manualLogout } = await chrome.storage.local.get(["user","pass","manualLogout"]);
+    const [sync, local] = await Promise.all([
+      chrome.storage.sync.get(["user", "pass"]),
+      chrome.storage.local.get(["manualLogout"])
+    ]);
+    const { user, pass } = sync;
+    const { manualLogout } = local;
     if (!user || !pass || manualLogout) return;
     if (document.querySelector("#loginerrormessage, .loginerrors, .alert-danger")) return;
 

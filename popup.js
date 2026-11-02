@@ -9,36 +9,45 @@ const STATUS_MAP = {
   logout:   { label: "Вийшли вручну",          dot: "logout"   },
 };
 
+// user/pass зберігаються в storage.sync — виживають після видалення/перевстановлення
+// решта (enabled, autoReload, статус) — в storage.local
+
 (async () => {
-  const d = await chrome.storage.local.get(["user","pass","enabled","autoReload","lastStatus","lastStatusTime","manualLogout"]);
-  $("user").value       = d.user || "";
-  $("pass").value       = d.pass || "";
-  $("enabled").checked  = d.enabled  !== false;
-  $("autoReload").checked = d.autoReload !== false;
-  renderStatus(d.lastStatus, d.lastStatusTime);
-  renderLogoutWarn(d.manualLogout, d.lastStatus);
+  const [sync, local] = await Promise.all([
+    chrome.storage.sync.get(["user", "pass"]),
+    chrome.storage.local.get(["enabled", "autoReload", "lastStatus", "lastStatusTime", "manualLogout"])
+  ]);
+  $("user").value         = sync.user  || "";
+  $("pass").value         = sync.pass  || "";
+  $("enabled").checked    = local.enabled    !== false;
+  $("autoReload").checked = local.autoReload !== false;
+  renderStatus(local.lastStatus, local.lastStatusTime);
+  renderLogoutWarn(local.manualLogout, local.lastStatus);
 })();
 
 $("save").onclick = async () => {
-  await chrome.storage.local.set({
-    user:       $("user").value.trim(),
-    pass:       $("pass").value,
-    enabled:    $("enabled").checked,
-    autoReload: $("autoReload").checked,
-  });
+  await Promise.all([
+    chrome.storage.sync.set({
+      user: $("user").value.trim(),
+      pass: $("pass").value,
+    }),
+    chrome.storage.local.set({
+      enabled:    $("enabled").checked,
+      autoReload: $("autoReload").checked,
+    })
+  ]);
   chrome.runtime.sendMessage({ type: "RESET_MANUAL_LOGOUT" }, () => {});
   $("logoutWarn").style.display = "none";
   $("save").textContent = "Збережено ✓";
   setTimeout(() => { $("save").textContent = "Зберегти"; }, 1800);
 };
 
-$("enabled").onchange  = () => chrome.storage.local.set({ enabled:    $("enabled").checked  });
+$("enabled").onchange    = () => chrome.storage.local.set({ enabled:    $("enabled").checked    });
 $("autoReload").onchange = () => chrome.storage.local.set({ autoReload: $("autoReload").checked });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  if (changes.lastStatus || changes.lastStatusTime || changes.manualLogout) {
-    chrome.storage.local.get(["lastStatus","lastStatusTime","manualLogout"], d => {
+  if (area === "local" && (changes.lastStatus || changes.lastStatusTime || changes.manualLogout)) {
+    chrome.storage.local.get(["lastStatus", "lastStatusTime", "manualLogout"], d => {
       renderStatus(d.lastStatus, d.lastStatusTime);
       renderLogoutWarn(d.manualLogout, d.lastStatus);
     });
@@ -46,7 +55,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 function renderStatus(status, time) {
-  const cfg  = STATUS_MAP[status] || STATUS_MAP.idle;
+  const cfg = STATUS_MAP[status] || STATUS_MAP.idle;
   $("statusLabel").textContent = cfg.label;
   $("statusTime").textContent  = time ? new Date(time).toLocaleTimeString("uk-UA") : "";
   const dot = $("statusDot");

@@ -5,16 +5,36 @@ const INTERVAL_MIN = 10;
 
 // ---------- утилиты ----------
 
+// user/pass — в storage.sync (зберігається після видалення розширення, синхронізується між пристроями)
+// решта    — в storage.local (статус, tries, флаги)
+
+async function getCredentials() {
+  const s = await chrome.storage.sync.get(["user", "pass"]);
+  // міграція: якщо в sync пусто, але в local є — переносимо одноразово
+  if (!s.user) {
+    const l = await chrome.storage.local.get(["user", "pass"]);
+    if (l.user) {
+      await chrome.storage.sync.set({ user: l.user, pass: l.pass || "" });
+      await chrome.storage.local.remove(["user", "pass"]);
+      return { user: l.user, pass: l.pass || "" };
+    }
+  }
+  return { user: s.user || "", pass: s.pass || "" };
+}
+
 async function getSettings() {
-  const d = await chrome.storage.local.get(["user", "pass", "enabled", "tries", "lastStatus", "autoReload", "manualLogout"]);
+  const [creds, d] = await Promise.all([
+    getCredentials(),
+    chrome.storage.local.get(["enabled", "tries", "lastStatus", "autoReload", "manualLogout"])
+  ]);
   return {
-    user: d.user || "",
-    pass: d.pass || "",
+    user: creds.user,
+    pass: creds.pass,
     enabled: d.enabled !== false,
     tries: d.tries || [],
     lastStatus: d.lastStatus || "idle",
-    autoReload: d.autoReload !== false, // по умолчанию включено
-    manualLogout: d.manualLogout === true // по умолчанию false
+    autoReload: d.autoReload !== false,
+    manualLogout: d.manualLogout === true
   };
 }
 
