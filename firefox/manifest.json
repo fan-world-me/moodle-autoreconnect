@@ -30,7 +30,7 @@
   "content_scripts": [
     {
       "matches": ["https://moodle.econom.zp.ua/*"],
-      "js": ["content.js"],
+      "js": ["content.js", "firefox-extras.js"],
       "run_at": "document_end"
     }
   ],
