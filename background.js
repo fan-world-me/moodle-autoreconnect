@@ -132,7 +132,7 @@ let _tickDebounceTimer = null;
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status === "complete" && tab.url && tab.url.startsWith(BASE)) {
     clearTimeout(_tickDebounceTimer);
-    _tickDebounceTimer = setTimeout(tick, 3000);
+    _tickDebounceTimer = setTimeout(tick, 600);
   }
 });
 
