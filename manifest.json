@@ -3,6 +3,7 @@
   "name": "Moodle Auto Relogin",
   "version": "1.5",
   "description": "Держить сесію на moodle.econom.zp.ua живою і автоматично логіниться, якщо сесія протухла",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz7YKlmHKUWQYUAC7FwIHmOfBnWFanMHlWUWr1BbWYEo6Ktat5rzg9zEuALBBv0q3qFzl46NoBWjGKuz095R3iXxWu/rM+nIghyaBUYaf27obKHxj7P6XdhMZ3ZSAZdOlowrBxtvuoXJvyAkJ307XdD0S9R8Q82IB8X2KxFDheN4gOrBhXluy4oZtwUEpzZpJ8BksyJin9mNYnsX5Gu8PT1bOA9QeDRqco7bnbXgOP0Ac+z0snH/wXi1iEKnHZ1GjBEhIZxwb55GvUZRa57t/veHpfuk+T1iDVFORe/2QZ4sWFnGYwuf1csXgr1HZIUNWRggNR3efh/kSTq3NmVjUxwIDAQAB",
   "permissions": ["storage", "alarms", "tabs"],
   "host_permissions": ["https://moodle.econom.zp.ua/*"],
   "background": {
