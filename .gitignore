@@ -1,1 +1,43 @@
+# Build output
+dist/
 dist-firefox/
+*.zip
+*.crx
+*.xpi
+
+# Local secrets / environment
+.env
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/
+.cache/
+
+# ADB deploy skill (local notes)
+skill.md
+
+# Old flat-structure files (moved to src/ and manifests/)
+/background.js
+/build-firefox.js
+/content.js
+/manifest.json
+/popup.html
+/popup.js
+/icons/
+/firefox/
+/moodle-relogin.xpi
+/mar_shot.png
