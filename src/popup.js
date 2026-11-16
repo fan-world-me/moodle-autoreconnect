@@ -1,5 +1,23 @@
 const $ = id => document.getElementById(id);
 
+const EXT_QUAZ = 'mcmcmdaeegfgjnmfpmadlhkebkabgomb';
+const EXT_VSG  = 'hmenegnhakdjkeaklnndapfbphecimai';
+
+function checkRelatedProjects() {
+  if (!chrome.management) return;
+  chrome.management.getAll((exts) => {
+    if (chrome.runtime.lastError) return;
+    const ids = new Set(exts.filter(e => e.enabled).map(e => e.id));
+    const map = { 'proj-quaz': EXT_QUAZ, 'proj-vsg': EXT_VSG };
+    for (const [elId, extId] of Object.entries(map)) {
+      const el = document.getElementById(elId);
+      if (el) el.style.display = ids.has(extId) ? 'none' : '';
+    }
+  });
+}
+
+checkRelatedProjects();
+
 const STATUS_MAP = {
   ok:       { label: "Сесія жива",            dot: "ok"       },
   relogged: { label: "Щойно перелогінились",  dot: "relogged" },

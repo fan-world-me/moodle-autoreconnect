@@ -67,16 +67,26 @@ Browser extension that keeps your [moodle.econom.zp.ua](https://moodle.econom.zp
 
 ### 🗂️ Project Structure
 
-| File | Role |
-|---|---|
-| `manifest.json` | Chrome / Edge / Brave config (MV3) |
-| `firefox/manifest.json` | Firefox config (MV2) |
-| `build-firefox.js` | Assembles `dist-firefox/` for Firefox |
-| `background.js` | Service worker — keepalive ticker, auto-login, debounce |
-| `content.js` | Logout detection + header widget + toast |
-| `popup.html` | Popup UI |
-| `popup.js` | Popup logic — save creds, toggle, status display |
-| `icons/` | 16 / 48 / 128 px PNG icons |
+```
+moodle-ext/
+├── src/
+│   ├── background.js          — service worker: keepalive ticker, auto-login, rate-limit
+│   ├── content.js             — logout detection, header widget, toast
+│   ├── firefox/
+│   │   └── firefox-extras.js  — Firefox MV2 compatibility shim
+│   ├── popup.html             — popup UI
+│   ├── popup.js               — popup logic: save creds, toggle, status
+│   └── icons/                 — 16 / 48 / 128 px PNG icons
+├── manifests/
+│   ├── chrome/manifest.json   — Chrome MV3 manifest
+│   └── firefox/manifest.json  — Firefox MV2 manifest
+├── dist/                      — build output (gitignored)
+├── package-extensions.ps1     — build script (Windows / PowerShell)
+├── package-extensions.sh      — build script (Linux / macOS / WSL)
+├── .gitignore
+├── LICENSE
+└── README.md
+```
 
 ---
 
@@ -95,31 +105,61 @@ Browser extension that keeps your [moodle.econom.zp.ua](https://moodle.econom.zp
 
 ---
 
-### 📦 Install
+### 📦 Build
+
+**Windows (PowerShell)**
+
+```powershell
+.\package-extensions.ps1
+```
+
+**Linux / macOS / WSL**
+
+```bash
+chmod +x package-extensions.sh   # once
+./package-extensions.sh
+```
+
+Output in `dist/`:
+
+```
+dist/
+├── chrome-unpacked/              — load in Chrome developer mode
+├── firefox-unpacked/             — load in Firefox temporary add-on mode
+├── moodle-relogin-chrome.zip     — Chrome package
+├── moodle-relogin-firefox.zip    — Firefox package
+└── moodle-relogin-firefox.xpi   — unsigned .xpi for Firefox Android
+```
+
+---
+
+### 🛠️ Install Locally
 
 **Chrome / Edge / Brave**
+
 ```
 1. Open chrome://extensions
 2. Enable "Developer mode" (top right)
-3. "Load unpacked" → select this repo folder
+3. Click "Load unpacked"
+4. Select dist/chrome-unpacked
 ```
 
-**Firefox**
-
-Firefox uses MV2, so the root `manifest.json` won't work directly.
-Run the build script first — it assembles everything into `dist-firefox/`:
-
-```bash
-node build-firefox.js
-```
+**Firefox Desktop**
 
 ```
 1. Open about:debugging#/runtime/this-firefox
-2. "Load Temporary Add-on" → select dist-firefox/manifest.json
+2. Click "Load Temporary Add-on"
+3. Select dist/firefox-unpacked/manifest.json
 ```
 
-> The Firefox manifest lives in `firefox/manifest.json` (MV2).
-> `build-firefox.js` copies all extension files + that manifest into `dist-firefox/`.
+**Firefox Android**
+
+```
+1. Install Firefox Nightly
+2. Open about:config → set xpinstall.signatures.required = false
+3. Transfer moodle-relogin-firefox.xpi to phone
+4. Open the .xpi directly in Firefox
+```
 
 ---
 
@@ -146,6 +186,15 @@ node build-firefox.js
 ### 📄 License
 
 [GPL-3.0](./LICENSE) © [fan-world-me](https://github.com/fan-world-me)
+
+---
+
+### 🔗 Other extensions by the author
+
+| Extension | Description |
+|---|---|
+| [🧠 Quiz AI Analyzer](https://github.com/fan-world-me/quizai) | Floating AI panel that auto-detects and answers quiz questions on vseosvita.ua, Moodle, Kahoot and more |
+| [🛡️ Vseosvita Focus Guard](https://github.com/fan-world-me/vseosvita-focus-guard) | Neutralizes focus tracking and tab-visibility detection on vseosvita.ua |
 
 ---
 
