@@ -125,11 +125,17 @@
   }
 
   // ── детект розлогіна на звичайній сторінці ───────────────────
+  // .usermenu є і у незалогіненого (там «Ви не увійшли (Увійти)»), тому дивимось на посилання:
+  // «Вийти» — залогінений, лише «Увійти» — ні.
+  function looksLoggedOut() {
+    if (document.querySelector('a[href*="/login/logout.php"]')) return false;
+    if (document.querySelector('a[href*="/login/index.php"]')) return true;
+    return !document.querySelector(".usermenu, [data-region='user-menu']");
+  }
+
   function checkSessionAndReact() {
     if (location.pathname.startsWith("/login/")) return;
-    if (!document.querySelector(".usermenu, [data-region='user-menu']")) {
-      safeSend({ type: "NO_SESSION_DETECTED" });
-    }
+    if (looksLoggedOut()) safeSend({ type: "NO_SESSION_DETECTED" });
   }
 
   // ── overlay «автоматичний вхід…» ─────────────────────────────

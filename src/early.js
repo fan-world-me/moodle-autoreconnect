@@ -110,8 +110,10 @@
     { title: "Відкриваємо сторінку…", sub: "Майже готово" }
   ];
   let shownAt = 0;
+  let splash = true;   // налаштування «Заставка»
 
   function showGate(stage) {
+    if (!splash) return;
     let ov = document.getElementById(OV_ID);
     if (!ov) {
       ov = document.createElement("div");
@@ -193,21 +195,52 @@
     return true;
   }
 
+  // Те саме правило, що в content.js / background.js: «Вийти» є — залогінений.
+  function domLoggedIn() {
+    if (document.querySelector('a[href*="/login/logout.php"]')) return true;
+    return !document.querySelector('a[href*="/login/index.php"]');
+  }
+
+  function whenDomReady() {
+    return document.readyState !== "loading"
+      ? Promise.resolve()
+      : new Promise(r => document.addEventListener("DOMContentLoaded", r, { once: true }));
+  }
+
+  // Сервер каже «сесія є» — але сторінку не показуємо, поки самі не побачимо в DOM,
+  // що вона справді залогінена. Якщо гостьова — примусова перевірка і релогін.
+  async function confirmOnPage() {
+    await whenDomReady();
+    if (done) return;
+    if (domLoggedIn()) return reveal();
+
+    showGate(0);
+    const r = await send({ type: "ENSURE_SESSION", force: true });
+    if (done) return;
+    if (r && r.ok && r.relogged) {
+      showGate(2);
+      if (!navigateGuarded(location.href)) reveal();
+      return;
+    }
+    reveal();
+  }
+
   function sameOrigin(url) {
     try { return new URL(url, location.origin).origin === location.origin; } catch (_) { return false; }
   }
 
   (async () => {
     let cfg = {};
-    try { cfg = await chrome.storage.local.get(["enabled", "manualLogout", "verifiedAt"]); }
+    try { cfg = await chrome.storage.local.get(["enabled", "manualLogout", "verifiedAt", "gate", "splash"]); }
     catch (_) { return reveal(); }
 
-    if (cfg.enabled === false || cfg.manualLogout === true) return reveal();
+    splash = cfg.splash !== false;
+    if (cfg.enabled === false || cfg.manualLogout === true || cfg.gate === false) return reveal();
 
     const onLogin = PATH.startsWith("/login/");
 
     // сесію перевіряли щойно — не чекаємо відповіді background
-    if (!onLogin && Date.now() - (cfg.verifiedAt || 0) < FAST_TTL_MS) return reveal();
+    if (!onLogin && Date.now() - (cfg.verifiedAt || 0) < FAST_TTL_MS) return confirmOnPage();
 
     // gate показуємо лише якщо перевірка затягнулась
     ovTimer = setTimeout(() => showGate(0), OVERLAY_DELAY_MS);
@@ -218,7 +251,7 @@
     clearTimeout(ovTimer);
     clearTimeout(stageTimer);
     if (done) return;
-    if (!res || !res.ok) return reveal();   // логін неможливий -> показуємо як є
+    if (!res || !res.ok) return reveal();   // логін неможливий (нема пароля, помилка…) -> показуємо як є
 
     if (onLogin) {
       // нас викинуло на сторінку логіну — йдемо одразу на потрібну сторінку
@@ -237,6 +270,6 @@
       return;
     }
 
-    reveal();
+    confirmOnPage();
   })();
 })();

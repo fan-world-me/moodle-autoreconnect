@@ -84,10 +84,22 @@ async function notifyTabs(autoReload) {
 
 // ---------- основна логіка ----------
 
+// Moodle з autologinguests пускає без сесії як гостя, і тоді /my/ НЕ редіректить на логін.
+// Тому крім URL дивимось ще й на HTML: у залогіненого є посилання «Вийти» (login/logout.php),
+// а у гостя — лише «Увійти» (login/index.php).
+function htmlLooksLoggedIn(html) {
+  if (html.includes("login/logout.php")) return true;
+  return !html.includes("login/index.php");
+}
+
 async function isLoggedIn() {
   const res = await fetch(`${BASE}/my/`, { credentials: "include", redirect: "follow" });
-  try { res.body && res.body.cancel(); } catch (_) {}
-  return !res.url.includes("/login/index.php");
+  if (res.url.includes("/login/index.php")) {
+    try { res.body && res.body.cancel(); } catch (_) {}
+    return false;
+  }
+  const html = await res.text();
+  return htmlLooksLoggedIn(html);
 }
 
 async function markVerified() {
@@ -152,9 +164,12 @@ let _ensurePromise = null;
 const FAST_TTL_MS = 30000; // стільки секунд сесія вважається перевіреною
 
 // -> { ok, relogged, url?, reason? }
-function ensureSession(tabId) {
+// force=true — ігнорувати кеш «щойно перевіряли» (коли сторінка виявилась гостьовою)
+function ensureSession(tabId, force) {
   if (tabId != null && tabId >= 0) _pendingTabs.add(tabId);
-  if (_ensurePromise) return _ensurePromise;
+  if (_ensurePromise) {
+    return force ? _ensurePromise.then(() => ensureSession(tabId, true)) : _ensurePromise;
+  }
 
   _ensurePromise = (async () => {
     const s = await getSettings();
@@ -163,7 +178,7 @@ function ensureSession(tabId) {
     if (!s.user || !s.pass) return { ok: false, reason: "nocreds" };
 
     const { verifiedAt = 0 } = await chrome.storage.local.get(["verifiedAt"]);
-    if (Date.now() - verifiedAt < FAST_TTL_MS) return { ok: true, relogged: false, cached: true };
+    if (!force && Date.now() - verifiedAt < FAST_TTL_MS) return { ok: true, relogged: false, cached: true };
 
     try {
       if (await isLoggedIn()) {
@@ -261,9 +276,12 @@ async function handleLoginRedirect(tabId, url) {
         let path = "";
         try { path = new URL(details.url).pathname; } catch (_) { return {}; }
         if (SKIP.test(path)) return {};
-        // не тримаємо сторінку довше 8 секунд
-        const timeout = new Promise(res => setTimeout(res, 8000));
-        return Promise.race([ensureSession(details.tabId).catch(() => null), timeout]).then(() => ({}));
+        return chrome.storage.local.get(["gate"]).then(d => {
+          if (d.gate === false) return {};
+          // не тримаємо сторінку довше 8 секунд
+          const timeout = new Promise(res => setTimeout(res, 8000));
+          return Promise.race([ensureSession(details.tabId).catch(() => null), timeout]).then(() => ({}));
+        }).catch(() => ({}));
       },
       { urls: [HOST_PATTERN], types: ["main_frame"] },
       ["blocking"]
@@ -303,11 +321,15 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
 // Повідомлення від content.js і popup.js
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "NO_SESSION_DETECTED") {
+    // сторінка гостьова: скидаємо кеш і даємо цій вкладці отримати SESSION_RELOGGED
+    // (раніше вона могла лишитись у _pendingTabs і не перезавантажитись)
+    if (sender.tab) _pendingTabs.delete(sender.tab.id);
+    chrome.storage.local.set({ verifiedAt: 0 });
     login().then(ok => sendResponse({ ok }));
     return true;
   }
   if (msg?.type === "ENSURE_SESSION") {
-    ensureSession(sender.tab && sender.tab.id).then(sendResponse).catch(() => sendResponse({ ok: false, reason: "error" }));
+    ensureSession(sender.tab && sender.tab.id, msg.force === true).then(sendResponse).catch(() => sendResponse({ ok: false, reason: "error" }));
     return true;
   }
   if (msg?.type === "FORCE_CHECK") {

@@ -33,13 +33,15 @@ const STATUS_MAP = {
 (async () => {
   const [sync, local] = await Promise.all([
     chrome.storage.sync.get(["user", "pass"]).catch(() => ({})),
-    chrome.storage.local.get(["user", "pass", "enabled", "autoReload", "lastStatus", "lastStatusTime", "manualLogout"])
+    chrome.storage.local.get(["user", "pass", "enabled", "autoReload", "lastStatus", "lastStatusTime", "manualLogout", "gate", "splash"])
   ]);
   // local має пріоритет (туди вже відновлено з localStorage moodle), sync як fallback
   $("user").value         = local.user  || sync.user  || "";
   $("pass").value         = local.pass  || sync.pass  || "";
   $("enabled").checked    = local.enabled    !== false;
   $("autoReload").checked = local.autoReload !== false;
+  $("gate").checked       = local.gate       !== false;
+  $("splash").checked     = local.splash     !== false;
   renderStatus(local.lastStatus, local.lastStatusTime);
   renderLogoutWarn(local.manualLogout, local.lastStatus);
 })();
@@ -48,7 +50,7 @@ $("save").onclick = async () => {
   const user = $("user").value.trim();
   const pass = $("pass").value;
   await Promise.all([
-    chrome.storage.local.set({ user, pass, enabled: $("enabled").checked, autoReload: $("autoReload").checked }),
+    chrome.storage.local.set({ user, pass, enabled: $("enabled").checked, autoReload: $("autoReload").checked, gate: $("gate").checked, splash: $("splash").checked }),
     // sync як додатковий резерв (працює якщо є акаунт Chrome)
     chrome.storage.sync.set({ user, pass }).catch(() => {})
   ]);
@@ -66,6 +68,8 @@ $("save").onclick = async () => {
 
 $("enabled").onchange    = () => chrome.storage.local.set({ enabled:    $("enabled").checked    });
 $("autoReload").onchange = () => chrome.storage.local.set({ autoReload: $("autoReload").checked });
+$("gate").onchange       = () => chrome.storage.local.set({ gate:       $("gate").checked       });
+$("splash").onchange     = () => chrome.storage.local.set({ splash:     $("splash").checked     });
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.lastStatus || changes.lastStatusTime || changes.manualLogout)) {
