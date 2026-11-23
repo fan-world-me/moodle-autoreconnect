@@ -1,13 +1,15 @@
 {
   "manifest_version": 2,
   "name": "Moodle Auto Relogin",
-  "version": "1.5",
+  "version": "1.6",
   "description": "Держить сесію на moodle.econom.zp.ua живою і автоматично логіниться, якщо сесія протухла",
   "permissions": [
     "storage",
     "alarms",
     "tabs",
     "management",
+    "webRequest",
+    "webRequestBlocking",
     "https://moodle.econom.zp.ua/*"
   ],
   "background": {
@@ -29,6 +31,11 @@
     }
   },
   "content_scripts": [
+    {
+      "matches": ["https://moodle.econom.zp.ua/*"],
+      "js": ["early.js"],
+      "run_at": "document_start"
+    },
     {
       "matches": ["https://moodle.econom.zp.ua/*"],
       "js": ["content.js", "firefox-extras.js"],
