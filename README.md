@@ -28,7 +28,7 @@
 
 <img src="https://img.shields.io/badge/Manifest-V3-00e5ff?style=for-the-badge&logo=googlechrome&logoColor=white"/>
 <img src="https://img.shields.io/badge/Firefox-128+-FF7139?style=for-the-badge&logo=firefox&logoColor=white"/>
-<img src="https://img.shields.io/badge/version-1.2-00c851?style=for-the-badge"/>
+<img src="https://img.shields.io/badge/version-1.6-00c851?style=for-the-badge"/>
 <img src="https://img.shields.io/badge/license-GPL--3.0-blueviolet?style=for-the-badge"/>
 
 </div>
@@ -38,11 +38,13 @@
 Browser extension that keeps your [moodle.econom.zp.ua](https://moodle.econom.zp.ua) session alive and silently re-logs you in if it expires — no more losing work to the 60-minute timeout.
 
 ### 💭 More about this extension
+- ⏸️ **Pre-load session gate** — the page is hidden until your session is verified; if it expired, the extension logs in first and opens the already logged-in page (no guest page, no manual F5)
+- 🪟 **Loading screen** — a branded splash with project info is shown while the session is being obtained
 - 🔄 Pings `/my/` every 10 minutes to keep the session alive
 - 🔐 Auto-submits login form in the background if session expires
-- 👁️ Detects logout on **any** page — not just `/login/index.php`
+- 👁️ Detects guest pages (Moodle's guest access) by the logout/login links, not just by redirects
 - 🧩 Injects a minimal status widget into the Moodle header
-- 🎛️ Popup with login/password fields, toggle, and last-check timestamp
+- 🎛️ Popup with login/password fields, toggles, and last-check timestamp
 - 🔔 Shows a non-intrusive toast if re-login happens while the page is open
 - 🛡️ Rate-limit: max 3 login attempts per 2 minutes (shared counter, prevents account lockout)
 
@@ -76,6 +78,7 @@ moodle-ext/
 │   │   └── firefox-extras.js  — Firefox MV2 compatibility shim
 │   ├── popup.html             — popup UI
 │   ├── popup.js               — popup logic: save creds, toggle, status
+│   ├── early.js               — document_start gate: hides the page, ensures the session, loading screen
 │   └── icons/                 — 16 / 48 / 128 px PNG icons
 ├── manifests/
 │   ├── chrome/manifest.json   — Chrome MV3 manifest
@@ -93,15 +96,29 @@ moodle-ext/
 ### 🚀 How it works
 
 ```
-[Alarm every 10 min]──┐
-[Tab fully loaded]─────┤──► tick() ──► isLoggedIn() ──┬──► OK  → setStatus("ok")
-[content.js: NO_SESSION]┘                              └──► login() → POST /login/index.php
-                                                                     ↓
-                                                           notifyTabs() → showToast()
+[Page request]
+      │
+      ▼
+ early.js (document_start) ── hides the page, shows the loading screen if it takes >250 ms
+      │  ENSURE_SESSION
+      ▼
+ background.js ── session verified <30 s ago? ──► OK
+      │ no
+      ▼
+ isLoggedIn() (URL + logout link in /my/ HTML)
+      ├── logged in ──► OK
+      └── not ────────► login() ─► relogged
+      │
+      ▼
+ early.js ── DOM confirms logged-in ─► show page
+          └─ guest page / relogged ─► force re-check + reload with the session
+
+[Alarm every 10 min] ─► tick() ─► keep-alive
 ```
 
-> `content.js` and `background.js` share a single `tries[]` counter in `chrome.storage.local`.
-> The rate-limit is global — both scripts respect the same 3-attempts-per-2-min cap.
+> **Chrome (MV3)** can't block a network request, so the page loads hidden and is revealed (or reloaded) once the session is confirmed.
+> **Firefox** additionally holds the main request with a blocking `webRequest` listener until the session check finishes (max 8 s).
+> A safety timeout reveals the page after 8 s no matter what, and redirects are capped at 3 per minute.
 
 ---
 
@@ -172,6 +189,15 @@ dist/
 <div align="center">
 <img src="https://img.shields.io/badge/on_save-session_check_fires_immediately-00e5ff?style=flat-square"/>
 </div>
+
+**Popup options**
+
+| Option | Default | What it does |
+|---|---|---|
+| Увімкнено | on | Master switch for keep-alive and auto-login |
+| Авто-оновлення сторінки | on | Reload open tabs right after a re-login |
+| Пауза до входу | on | Don't show the site until the session is ready |
+| Заставка | on | Show the loading screen with project info while waiting |
 
 ---
 
